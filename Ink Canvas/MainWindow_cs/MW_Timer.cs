@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
@@ -56,25 +57,25 @@ namespace Ink_Canvas
 
     public partial class MainWindow : Window
     {
-        private Timer timerCheckPPT = new Timer();
-        private Timer timerKillProcess = new Timer();
-        private Timer timerCheckAutoFold = new Timer();
+        // 其他定时器保持不变
+        private System.Timers.Timer timerCheckPPT = new System.Timers.Timer();
+        private System.Timers.Timer timerKillProcess = new System.Timers.Timer();
+        private System.Timers.Timer timerCheckAutoFold = new System.Timers.Timer();
         private string AvailableLatestVersion;
-        private Timer timerCheckAutoUpdateWithSilence = new Timer();
-        private bool isHidingSubPanelsWhenInking; // 避免书写时触发二次关闭二级菜单导致动画不连续
+        private System.Timers.Timer timerCheckAutoUpdateWithSilence = new System.Timers.Timer();
+        private bool isHidingSubPanelsWhenInking;
 
-        private Timer timerDisplayTime = new Timer();
-        private Timer timerDisplayDate = new Timer();
-        private Timer timerNtpSync = new Timer();
-
+        // 重构时间显示相关
         private TimeViewModel nowTimeVM = new TimeViewModel();
+        private CancellationTokenSource timeUpdateCancellationTokenSource;
+        private CancellationTokenSource ntpSyncCancellationTokenSource;
+
         private DateTime cachedNetworkTime = DateTime.Now;
         private DateTime lastNtpSyncTime = DateTime.MinValue;
-        private string lastDisplayedTime = "";
         private bool useNetworkTime = false;
         private TimeSpan networkTimeOffset = TimeSpan.Zero;
-        private DateTime lastLocalTime = DateTime.Now; // 记录上次的本地时间，用于检测时间跳跃
-        private bool isNtpSyncing = false; // 防止重复NTP同步的标志 
+        private DateTime lastLocalTime = DateTime.Now;
+        private readonly object timeSyncLock = new object();
 
         private async Task<DateTime> GetNetworkTimeAsync()
         {
@@ -83,15 +84,33 @@ namespace Ink_Canvas
                 const string ntpServer = "ntp.ntsc.ac.cn";
                 var ntpData = new byte[48];
                 ntpData[0] = 0x1B;
+                
                 var addresses = await Dns.GetHostAddressesAsync(ntpServer);
                 var ipEndPoint = new IPEndPoint(addresses[0], 123);
+                
                 using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
                 {
                     socket.ReceiveTimeout = 5000;
-                    socket.Connect(ipEndPoint);
-                    await Task.Factory.FromAsync(socket.BeginSend(ntpData, 0, ntpData.Length, SocketFlags.None, null, socket), socket.EndSend);
-                    await Task.Factory.FromAsync(socket.BeginReceive(ntpData, 0, ntpData.Length, SocketFlags.None, null, socket), socket.EndReceive);
+                    await Task.Run(() => socket.Connect(ipEndPoint));
+                    
+                    var sendTask = Task.Run(() => socket.Send(ntpData));
+                    var receiveTask = Task.Run(() => socket.Receive(ntpData));
+                    
+                    var timeoutTask = Task.Delay(5000);
+                    var completedTask = await Task.WhenAny(sendTask, timeoutTask);
+                    
+                    if (completedTask == timeoutTask)
+                        throw new TimeoutException("NTP request timeout");
+                    
+                    await sendTask;
+                    
+                    completedTask = await Task.WhenAny(receiveTask, timeoutTask);
+                    if (completedTask == timeoutTask)
+                        throw new TimeoutException("NTP response timeout");
+                    
+                    await receiveTask;
                 }
+
                 const byte serverReplyTime = 40;
                 ulong intPart = BitConverter.ToUInt32(ntpData.Skip(serverReplyTime).Take(4).Reverse().ToArray(), 0);
                 ulong fractPart = BitConverter.ToUInt32(ntpData.Skip(serverReplyTime + 4).Take(4).Reverse().ToArray(), 0);
@@ -99,162 +118,186 @@ namespace Ink_Canvas
                 var networkDateTime = (new DateTime(1900, 1, 1)).AddMilliseconds((long)milliseconds);
                 return networkDateTime.ToLocalTime();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogHelper.WriteLogToFile($"NTP获取失败: {ex.Message}", LogHelper.LogType.Warning);
                 return DateTime.Now;
             }
         }
 
-        // 修改InitTimers方法中的初始时间和日期格式
         private void InitTimers()
         {
-            // PPT检查现在由PPTManager处理，不再需要定时器
-            // timerCheckPPT.Elapsed += TimerCheckPPT_Elapsed;
-            // timerCheckPPT.Interval = 500;
+            // 其他定时器初始化保持不变
             timerKillProcess.Elapsed += TimerKillProcess_Elapsed;
             timerKillProcess.Interval = 2000;
             timerCheckAutoFold.Elapsed += timerCheckAutoFold_Elapsed;
             timerCheckAutoFold.Interval = 500;
             timerCheckAutoUpdateWithSilence.Elapsed += timerCheckAutoUpdateWithSilence_Elapsed;
             timerCheckAutoUpdateWithSilence.Interval = 1000 * 60 * 10;
-            WaterMarkTime.DataContext = nowTimeVM;
-            WaterMarkDate.DataContext = nowTimeVM;
-            timerDisplayTime.Elapsed += TimerDisplayTime_Elapsed;
-            timerDisplayTime.Interval = 1000;
-            timerDisplayTime.Start();
-            timerDisplayDate.Elapsed += TimerDisplayDate_Elapsed;
-            timerDisplayDate.Interval = 1000 * 60 * 60 * 1;
-            timerDisplayDate.Start();
-            timerNtpSync.Elapsed += async (s, e) => await TimerNtpSync_ElapsedAsync();
-            timerNtpSync.Interval = 1000 * 60 * 60 * 2; // 每2小时同步一次
-            timerNtpSync.Start();
-            timerKillProcess.Start();
-            nowTimeVM.nowDate = DateTime.Now.ToString("yyyy'年'MM'月'dd'日' dddd");
-            nowTimeVM.nowTime = DateTime.Now.ToString("tt hh'时'mm'分'ss'秒'");
 
-            // 程序启动时立即进行一次NTP同步
+            // 启动时间更新任务
+            StartTimeUpdateLoop();
+            StartNtpSyncLoop();
+
+            timerKillProcess.Start();
+            
+            // 初始时间显示
+            UpdateTimeDisplay();
+            UpdateDateDisplay();
+        }
+
+        private void StartTimeUpdateLoop()
+        {
+            timeUpdateCancellationTokenSource = new CancellationTokenSource();
+            var token = timeUpdateCancellationTokenSource.Token;
+
             Task.Run(async () =>
             {
-                try
+                while (!token.IsCancellationRequested)
                 {
-                    await TimerNtpSync_ElapsedAsync();
-                }
-                catch (Exception ex)
-                {
-                    LogHelper.WriteLogToFile($"程序启动时NTP同步失败: {ex.Message}", LogHelper.LogType.Error);
+                    try
+                    {
+                        await Task.Delay(1000, token); // 每秒更新一次时间
+                        UpdateTimeDisplay();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.WriteLogToFile($"时间更新循环错误: {ex.Message}", LogHelper.LogType.Error);
+                    }
                 }
             });
         }
 
-        // NTP同步定时器事件处理
-        private async Task TimerNtpSync_ElapsedAsync()
+        private void StartNtpSyncLoop()
         {
-            // 防止重复同步
-            if (isNtpSyncing) return;
+            ntpSyncCancellationTokenSource = new CancellationTokenSource();
+            var token = ntpSyncCancellationTokenSource.Token;
 
-            isNtpSyncing = true;
-            try
+            // 立即执行一次NTP同步
+            _ = Task.Run(async () =>
             {
+                await PerformNtpSync();
+            });
 
-                // 添加超时机制，最多等待10秒
-                var timeoutTask = Task.Delay(10000);
-                var ntpTask = GetNetworkTimeAsync();
-
-                var completedTask = await Task.WhenAny(ntpTask, timeoutTask);
-
-                if (completedTask == timeoutTask)
-                {
-                    cachedNetworkTime = DateTime.Now;
-                    lastNtpSyncTime = DateTime.Now;
-                    useNetworkTime = false;
-                    networkTimeOffset = TimeSpan.Zero;
-                    return;
-                }
-
-                DateTime networkTime = await ntpTask;
-                DateTime localTime = DateTime.Now;
-
-                cachedNetworkTime = networkTime;
-                lastNtpSyncTime = localTime;
-
-                // 计算网络时间与本地时间的偏移量
-                networkTimeOffset = networkTime - localTime;
-
-                // 如果时间差超过3分钟，则使用网络时间
-                useNetworkTime = Math.Abs(networkTimeOffset.TotalMinutes) > 3.0;
-
-            }
-            catch (Exception ex)
+            Task.Run(async () =>
             {
-                // NTP同步失败时，保持使用本地时间
-                cachedNetworkTime = DateTime.Now;
-                lastNtpSyncTime = DateTime.Now;
-                useNetworkTime = false;
-                networkTimeOffset = TimeSpan.Zero;
-
-                LogHelper.WriteLogToFile($"NTP同步失败: {ex.Message}", LogHelper.LogType.Warning);
-            }
-            finally
-            {
-                isNtpSyncing = false;
-            }
-        }
-
-        // 优化后的时间显示方法，仅在NTP同步时计算网络时间偏移
-        private void TimerDisplayTime_Elapsed(object sender, ElapsedEventArgs e)
-        {
-            DateTime localTime = DateTime.Now;
-            DateTime displayTime = localTime; // 默认使用本地时间
-
-            // 检测系统时间是否发生重大跳跃（超过2分钟）
-            TimeSpan timeJump = localTime - lastLocalTime;
-            double timeJumpMinutes = Math.Abs(timeJump.TotalMinutes);
-
-            if (timeJumpMinutes > 3 && !isNtpSyncing)
-            {
-                // 系统时间发生重大变化（超过3分钟），立即触发NTP同步
-                // 使用异步方式触发NTP同步，避免阻塞主线程
-                Task.Run(async () =>
+                while (!token.IsCancellationRequested)
                 {
                     try
                     {
-                        await TimerNtpSync_ElapsedAsync();
+                        await Task.Delay(1000 * 60 * 60 * 2, token); // 每2小时同步一次
+                        await PerformNtpSync();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
                     }
                     catch (Exception ex)
                     {
-                        LogHelper.WriteLogToFile($"时间跳跃触发的NTP同步失败: {ex.Message}", LogHelper.LogType.Error);
+                        LogHelper.WriteLogToFile($"NTP同步循环错误: {ex.Message}", LogHelper.LogType.Error);
                     }
-                });
-            }
-            lastLocalTime = localTime;
+                }
+            });
+        }
 
-            // 如果启用网络时间且偏移量已计算，则应用偏移量
-            if (useNetworkTime && networkTimeOffset != TimeSpan.Zero)
+        private async Task PerformNtpSync()
+        {
+            try
             {
-                displayTime = localTime + networkTimeOffset;
-            }
+                var networkTime = await GetNetworkTimeAsync();
+                var localTime = DateTime.Now;
 
-            // 格式化时间字符串
-            string timeString = displayTime.ToString("tt hh'时'mm'分'ss'秒'");
-
-
-            // 只有当时间字符串发生变化时才更新UI，避免不必要的UI刷新
-            if (timeString != lastDisplayedTime)
-            {
-                lastDisplayedTime = timeString;
-
-                // 使用BeginInvoke异步更新UI，避免阻塞
-                Dispatcher.BeginInvoke(new Action(() =>
+                lock (timeSyncLock)
                 {
-                    nowTimeVM.nowTime = timeString;
-                }));
+                    cachedNetworkTime = networkTime;
+                    lastNtpSyncTime = localTime;
+                    networkTimeOffset = networkTime - localTime;
+                    useNetworkTime = Math.Abs(networkTimeOffset.TotalMinutes) > 3.0;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.WriteLogToFile($"NTP同步失败: {ex.Message}", LogHelper.LogType.Warning);
             }
         }
 
-        // 修改TimerDisplayDate_Elapsed方法中的日期格式
-        private void TimerDisplayDate_Elapsed(object sender, ElapsedEventArgs e)
+        private void UpdateTimeDisplay()
         {
-            nowTimeVM.nowDate = DateTime.Now.ToString("yyyy'年'MM'月'dd'日' dddd");
+            try
+            {
+                var localTime = DateTime.Now;
+                
+                // 检测时间跳跃
+                var timeJump = localTime - lastLocalTime;
+                if (Math.Abs(timeJump.TotalMinutes) > 3)
+                {
+                    // 时间跳跃超过3分钟，触发NTP同步
+                    _ = Task.Run(async () =>
+                    {
+                        await PerformNtpSync();
+                    });
+                }
+                
+                lastLocalTime = localTime;
+
+                DateTime displayTime;
+                lock (timeSyncLock)
+                {
+                    displayTime = useNetworkTime ? localTime + networkTimeOffset : localTime;
+                }
+
+                var timeString = displayTime.ToString("tt hh'时'mm'分'ss'秒'");
+
+                // 只有在时间变化时才更新UI
+                if (nowTimeVM.nowTime != timeString)
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        nowTimeVM.nowTime = timeString;
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.WriteLogToFile($"更新时间显示错误: {ex.Message}", LogHelper.LogType.Error);
+            }
+        }
+
+        private void UpdateDateDisplay()
+        {
+            try
+            {
+                var dateString = DateTime.Now.ToString("yyyy'年'MM'月'dd'日' dddd");
+                
+                if (nowTimeVM.nowDate != dateString)
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        nowTimeVM.nowDate = dateString;
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.WriteLogToFile($"更新日期显示错误: {ex.Message}", LogHelper.LogType.Error);
+            }
+        }
+
+        private void StopTimeUpdateLoop()
+        {
+            timeUpdateCancellationTokenSource?.Cancel();
+            ntpSyncCancellationTokenSource?.Cancel();
+        }
+
+        // 重写其他方法以确保资源正确释放
+        protected override void OnClosed(EventArgs e)
+        {
+            StopTimeUpdateLoop();
+            base.OnClosed(e);
         }
 
         private void TimerKillProcess_Elapsed(object sender, ElapsedEventArgs e)
@@ -399,7 +442,6 @@ namespace Ink_Canvas
             }
             catch { }
         }
-
 
         private bool foldFloatingBarByUser, // 保持收纳操作不受自动收纳的控制
             unfoldFloatingBarByUser; // 允许用户在希沃软件内进行展开操作
