@@ -255,10 +255,10 @@ namespace Ink_Canvas
                 // 只有在时间变化时才更新UI
                 if (nowTimeVM.nowTime != timeString)
                 {
-                    Dispatcher.BeginInvoke(() =>
+                    Dispatcher.BeginInvoke(new Action(() =>
                     {
                         nowTimeVM.nowTime = timeString;
-                    });
+                    }));
                 }
             }
             catch (Exception ex)
@@ -275,10 +275,10 @@ namespace Ink_Canvas
                 
                 if (nowTimeVM.nowDate != dateString)
                 {
-                    Dispatcher.BeginInvoke(() =>
+                    Dispatcher.BeginInvoke(new Action(() =>
                     {
                         nowTimeVM.nowDate = dateString;
-                    });
+                    }));
                 }
             }
             catch (Exception ex)
