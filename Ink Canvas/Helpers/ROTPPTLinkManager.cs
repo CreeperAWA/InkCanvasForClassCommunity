@@ -11,25 +11,14 @@ using Timer = System.Timers.Timer;
 
 namespace Ink_Canvas.Helpers
 {
-    public class ROTPPTManager : IPPTLinkManager
+    public class ROTPPTLinkManager : BasePPTLinkManager
     {
-        #region Events
-        public event Action<object> SlideShowBegin;
-        public event Action<object> SlideShowNextSlide;
-        public event Action<object> SlideShowEnd;
-        public event Action<object> PresentationOpen;
-        public event Action<object> PresentationClose;
-        public event Action<bool> PPTConnectionChanged;
-        public event Action<bool> SlideShowStateChanged;
-        #endregion
-
-        #region Properties
-        public dynamic PPTApplication { get; private set; }
+        public override dynamic PPTApplication { get; protected set; }
         public dynamic CurrentPresentation { get; private set; }
         public dynamic CurrentSlides { get; private set; }
         public dynamic CurrentSlide { get; private set; }
-        public int SlidesCount { get; private set; }
-        public bool IsConnected
+        public override int SlidesCount { get; protected set; }
+        public override bool IsConnected
         {
             get
             {
@@ -38,14 +27,12 @@ namespace Ink_Canvas.Helpers
                     if (PPTApplication == null) return false;
                     if (!Marshal.IsComObject(PPTApplication)) return false;
 
-                    // 尝试访问一个简单的属性来验证连接是否有效
                     var _ = PPTApplication.Name;
                     return true;
                 }
                 catch (COMException comEx)
                 {
                     var hr = (uint)comEx.HResult;
-                    // 如果COM对象已失效，返回false
                     if (hr == 0x8001010E || hr == 0x80004005 || hr == 0x800706B5)
                     {
                         return false;
@@ -58,7 +45,7 @@ namespace Ink_Canvas.Helpers
                 }
             }
         }
-        public bool IsInSlideShow
+        public override bool IsInSlideShow
         {
             get
             {
@@ -119,9 +106,8 @@ namespace Ink_Canvas.Helpers
                 }
             }
         }
-        public bool IsSupportWPS { get; set; } = false;
-        public bool SkipAnimationsWhenNavigating { get; set; } = false;
-        #endregion
+        public override bool IsSupportWPS { get; set; } = false;
+        public override bool SkipAnimationsWhenNavigating { get; set; } = false;
 
         #region Private Fields
         private Thread _monitoringThread;
@@ -149,11 +135,11 @@ namespace Ink_Canvas.Helpers
         #endregion
 
         #region Constructor & Initialization
-        public ROTPPTManager()
+        public ROTPPTLinkManager()
         {
         }
 
-        public void StartMonitoring()
+        public override void StartMonitoring()
         {
             if (_disposed) return;
 
@@ -175,7 +161,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public void StopMonitoring()
+        public override void StopMonitoring()
         {
             lock (_monitoringLock)
             {
@@ -195,7 +181,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public void ReloadConnection()
+        public override void ReloadConnection()
         {
             if (_disposed) return;
 
@@ -555,7 +541,7 @@ namespace Ink_Canvas.Helpers
                                         {
                                             try
                                             {
-                                                SlideShowNextSlide?.Invoke(_pptSlideShowWindow);
+                                                OnSlideShowNextSlide(_pptSlideShowWindow);
                                             }
                                             catch (Exception ex)
                                             {
@@ -586,7 +572,7 @@ namespace Ink_Canvas.Helpers
                                     {
                                         try
                                         {
-                                            SlideShowNextSlide?.Invoke(_pptSlideShowWindow);
+                                            OnSlideShowNextSlide(_pptSlideShowWindow);
                                         }
                                         catch (Exception ex)
                                         {
@@ -617,7 +603,7 @@ namespace Ink_Canvas.Helpers
                                 SlidesCount = 0;
 
                                 _lastSlideShowState = false;
-                                SlideShowStateChanged?.Invoke(false);
+                                OnSlideShowStateChanged(false);
 
                                 if (_pptActivePresentation != null)
                                 {
@@ -964,7 +950,7 @@ namespace Ink_Canvas.Helpers
                                                 try
                                                 {
                                                     LogHelper.WriteLogToFile($"轮询模式检测到页码变化: {_lastPolledSlideNumber} -> {currentPage}，触发事件", LogHelper.LogType.Trace);
-                                                    SlideShowNextSlide?.Invoke(_pptSlideShowWindow);
+                                                    OnSlideShowNextSlide(_pptSlideShowWindow);
                                                 }
                                                 catch (Exception ex)
                                                 {
@@ -1008,7 +994,7 @@ namespace Ink_Canvas.Helpers
                                 try
                                 {
                                     LogHelper.WriteLogToFile($"轮询模式检测到页码变化: {_lastPolledSlideNumber} -> {currentPage}，触发事件", LogHelper.LogType.Trace);
-                                    SlideShowNextSlide?.Invoke(_pptSlideShowWindow);
+                                    OnSlideShowNextSlide(_pptSlideShowWindow);
                                 }
                                 catch (Exception ex)
                                 {
@@ -1038,7 +1024,7 @@ namespace Ink_Canvas.Helpers
                         SlidesCount = 0;
 
                         _lastSlideShowState = false;
-                        SlideShowStateChanged?.Invoke(false);
+                        OnSlideShowStateChanged(false);
 
                         if (_pptActivePresentation != null)
                         {
@@ -1074,7 +1060,7 @@ namespace Ink_Canvas.Helpers
                 if (currentSlideShowState != _lastSlideShowState)
                 {
                     _lastSlideShowState = currentSlideShowState;
-                    SlideShowStateChanged?.Invoke(currentSlideShowState);
+                    OnSlideShowStateChanged(currentSlideShowState);
 
                     if (!currentSlideShowState)
                     {
@@ -1252,7 +1238,7 @@ namespace Ink_Canvas.Helpers
                         UpdateCurrentPresentationInfo();
                     }
 
-                    PPTConnectionChanged?.Invoke(true);
+                    OnPPTConnectionChanged(true);
 
                     try
                     {
@@ -1301,7 +1287,7 @@ namespace Ink_Canvas.Helpers
                 if (slideShowWindow == null)
                     return;
 
-                SlideShowBegin?.Invoke(slideShowWindow);
+                OnSlideShowBegin(slideShowWindow);
                 LogHelper.WriteLogToFile("检测到放映已在进行中，热重载", LogHelper.LogType.Trace);
             }
             catch (COMException comEx)
@@ -1374,7 +1360,7 @@ namespace Ink_Canvas.Helpers
                 {
                     try
                     {
-                        PresentationClose?.Invoke(_pptActivePresentation);
+                        OnPresentationClose(_pptActivePresentation);
                     }
                     catch (Exception ex)
                     {
@@ -1457,7 +1443,7 @@ namespace Ink_Canvas.Helpers
                 _forcePolling = true;
                 _bindingEvents = false;
 
-                PPTConnectionChanged?.Invoke(false);
+                OnPPTConnectionChanged(false);
 
                 LogHelper.WriteLogToFile("已断开PPT连接，并显式释放所有COM对象", LogHelper.LogType.Event);
 
@@ -1776,7 +1762,7 @@ namespace Ink_Canvas.Helpers
                 }
 
                 UpdateCurrentPresentationInfo();
-                PresentationOpen?.Invoke(pres);
+                OnPresentationOpen(pres);
                 LogHelper.WriteLogToFile($"演示文稿已打开: {pres?.Name}", LogHelper.LogType.Event);
             }
             catch (Exception ex)
@@ -1821,7 +1807,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        private void OnSlideShowBegin(object wn)
+        protected override void OnSlideShowBegin(object wn)
         {
             try
             {
@@ -1854,10 +1840,10 @@ namespace Ink_Canvas.Helpers
                 if (!_lastSlideShowState)
                 {
                     _lastSlideShowState = true;
-                    SlideShowStateChanged?.Invoke(true);
+                    OnSlideShowStateChanged(true);
                 }
 
-                SlideShowBegin?.Invoke(wn);
+                base.OnSlideShowBegin(wn);
             }
             catch (Exception ex)
             {
@@ -1890,7 +1876,7 @@ namespace Ink_Canvas.Helpers
                 }
 
                 UpdateCurrentPresentationInfo();
-                SlideShowNextSlide?.Invoke(wn);
+                base.OnSlideShowNextSlide(wn);
             }
             catch (Exception ex)
             {
@@ -1898,7 +1884,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        private void OnSlideShowEnd(object pres)
+        protected override void OnSlideShowEnd(object pres)
         {
             try
             {
@@ -1920,10 +1906,10 @@ namespace Ink_Canvas.Helpers
                 if (_lastSlideShowState)
                 {
                     _lastSlideShowState = false;
-                    SlideShowStateChanged?.Invoke(false);
+                    OnSlideShowStateChanged(false);
                 }
 
-                SlideShowEnd?.Invoke(pres);
+                base.OnSlideShowEnd(pres);
             }
             catch (Exception ex)
             {
@@ -1938,7 +1924,7 @@ namespace Ink_Canvas.Helpers
         #endregion
 
         #region Public Methods
-        public bool TryNavigateToSlide(int slideNumber)
+        public override bool TryNavigateToSlide(int slideNumber)
         {
             object slideShowWindows = null;
             object slideShowWindow = null;
@@ -2025,7 +2011,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public bool TryNavigateNext()
+        public override bool TryNavigateNext()
         {
             try
             {
@@ -2088,7 +2074,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public bool TryNavigatePrevious()
+        public override bool TryNavigatePrevious()
         {
             try
             {
@@ -2151,7 +2137,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public bool TryEndSlideShow()
+        public override bool TryEndSlideShow()
         {
             object slideShowWindows = null;
             object slideShowWindow = null;
@@ -2203,7 +2189,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public bool TryStartSlideShow()
+        public override bool TryStartSlideShow()
         {
             try
             {
@@ -2234,7 +2220,7 @@ namespace Ink_Canvas.Helpers
         /// <summary>
         /// 获取当前活跃的演示文稿
         /// </summary>
-        public object GetCurrentActivePresentation()
+        public override object GetCurrentActivePresentation()
         {
             object slideShowWindows = null;
             object slideShowWindow = null;
@@ -2412,7 +2398,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public int GetCurrentSlideNumber()
+        public override int GetCurrentSlideNumber()
         {
             object activeWindow = null;
             object selection = null;
@@ -2483,7 +2469,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public string GetPresentationName()
+        public override string GetPresentationName()
         {
             try
             {
@@ -2535,7 +2521,7 @@ namespace Ink_Canvas.Helpers
             }
         }
 
-        public bool TryShowSlideNavigation()
+        public override bool TryShowSlideNavigation()
         {
             object slideShowWindows = null;
             object slideShowWindow = null;
@@ -3020,7 +3006,7 @@ namespace Ink_Canvas.Helpers
                 SlidesCount = 0;
                 StopWpsProcessCheckTimer();
 
-                PPTConnectionChanged?.Invoke(false);
+                OnPPTConnectionChanged(false);
 
                 LogHelper.WriteLogToFile("WPS进程结束后已清理所有COM对象并重启连接检查", LogHelper.LogType.Event);
             }
@@ -3542,7 +3528,7 @@ namespace Ink_Canvas.Helpers
         #endregion
 
         #region Dispose
-        public void Dispose()
+        public override void Dispose()
         {
             if (!_disposed)
             {

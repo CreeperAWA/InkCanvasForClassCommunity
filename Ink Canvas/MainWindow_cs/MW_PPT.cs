@@ -248,7 +248,7 @@ namespace Ink_Canvas
                 // 根据设置选择 COM / ROT 架构
                 if (Settings.PowerPointSettings.UseRotPptLink)
                 {
-                    _pptManager = new ROTPPTManager();
+                    _pptManager = new ROTPPTLinkManager();
                 }
                 else
                 {
