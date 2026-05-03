@@ -725,9 +725,66 @@ namespace Ink_Canvas.Helpers
 
             var filled = FilledGlyphStroke.TryCreate(geom, templateDa);
             if (filled == null)
-                return list;
+                return StrokesFromOutlinedGeometry(geom, templateDa, 0.35);
 
             list.Add(filled);
+            return list;
+        }
+
+        private static List<Stroke> StrokesFromOutlinedGeometry(Geometry geometry, DrawingAttributes da, double tolerance)
+        {
+            var list = new List<Stroke>();
+            if (geometry == null || geometry.IsEmpty() || da == null)
+                return list;
+
+            Geometry outlined;
+            try
+            {
+                outlined = geometry.GetOutlinedPathGeometry(tolerance, ToleranceType.Absolute);
+            }
+            catch
+            {
+                return list;
+            }
+
+            if (outlined == null || outlined.IsEmpty())
+                return list;
+
+            Geometry flat;
+            try
+            {
+                flat = outlined.GetFlattenedPathGeometry(tolerance, ToleranceType.Absolute);
+            }
+            catch
+            {
+                return list;
+            }
+
+            if (!(flat is PathGeometry pg))
+                return list;
+
+            foreach (var fig in pg.Figures)
+            {
+                var pts = new StylusPointCollection();
+                pts.Add(new StylusPoint(fig.StartPoint.X, fig.StartPoint.Y, 0.5f));
+                foreach (var seg in fig.Segments)
+                {
+                    switch (seg)
+                    {
+                        case LineSegment ls:
+                            pts.Add(new StylusPoint(ls.Point.X, ls.Point.Y, 0.5f));
+                            break;
+                        case PolyLineSegment pls:
+                            foreach (var p in pls.Points)
+                                pts.Add(new StylusPoint(p.X, p.Y, 0.5f));
+                            break;
+                    }
+                }
+
+                if (pts.Count >= 2)
+                    list.Add(new Stroke(pts) { DrawingAttributes = da.Clone() });
+            }
+
             return list;
         }
     }

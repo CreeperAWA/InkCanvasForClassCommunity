@@ -207,6 +207,7 @@ namespace Ink_Canvas
         /// </summary>
         private Point pointPPT = new Point(-1, -1);
         private DispatcherTimer _floatingBarScreenFollowTimer;
+        private DispatcherTimer _popupRefreshTimer;
         private string _lastFloatingBarScreenDeviceName;
         private string _lastCanvasScreenDeviceName;
         private bool _isRebuildingCanvasForScreen;
@@ -237,6 +238,7 @@ namespace Ink_Canvas
 
                 // 标记需要更新 Popup 位置（使用 PopupManagerHelper）
                 _popupManager?.MarkNeedsUpdate();
+                RefreshPopupPositionThrottled();
 
                 if (BorderTools.IsOpen) _popupManager?.BringToFront(BorderTools);
                 if (BoardBorderToolsPopup.IsOpen) _popupManager?.BringToFront(BoardBorderToolsPopup);
@@ -268,6 +270,76 @@ namespace Ink_Canvas
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[PopupManager] Initialize error: {ex.Message}");
+            }
+        }
+
+        private void RefreshPopupPositionThrottled()
+        {
+            try
+            {
+                if (!BorderTools.IsOpen && !BoardBorderToolsPopup.IsOpen && !BorderDrawShape.IsOpen && !BoardBorderDrawShape.IsOpen)
+                    return;
+
+                if (_popupRefreshTimer == null)
+                {
+                    _popupRefreshTimer = new DispatcherTimer();
+                    _popupRefreshTimer.Interval = TimeSpan.FromMilliseconds(16);
+                    _popupRefreshTimer.Tick += (s, e) =>
+                    {
+                        _popupRefreshTimer?.Stop();
+                        RefreshPopupPositionInternal();
+                    };
+                }
+
+                _popupRefreshTimer.Stop();
+                _popupRefreshTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RefreshPopupPositionThrottled error: {ex.Message}");
+            }
+        }
+
+        private void RefreshPopupPositionInternal()
+        {
+            try
+            {
+                RefreshPopupForcefully(BorderTools);
+                RefreshPopupForcefully(BoardBorderToolsPopup);
+                RefreshPopupForcefully(BorderDrawShape);
+                RefreshPopupForcefully(BoardBorderDrawShape);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RefreshPopupPositionInternal error: {ex.Message}");
+            }
+        }
+
+        private void RefreshPopupForcefully(Popup popup)
+        {
+            if (popup == null || !popup.IsOpen || popup.PlacementTarget == null) return;
+
+            try
+            {
+                popup.InvalidateMeasure();
+                popup.InvalidateArrange();
+
+                var originalHorizontalOffset = popup.HorizontalOffset;
+                var originalVerticalOffset = popup.VerticalOffset;
+
+                popup.HorizontalOffset = originalHorizontalOffset + 0.001;
+                popup.VerticalOffset = originalVerticalOffset + 0.001;
+
+                popup.HorizontalOffset = originalHorizontalOffset;
+                popup.VerticalOffset = originalVerticalOffset;
+
+                popup.UpdateLayout();
+
+                AnimationsHelper.ForceRefreshPopupPosition(popup);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RefreshPopupForcefully error: {ex.Message}");
             }
         }
 
@@ -324,6 +396,7 @@ namespace Ink_Canvas
                     GetCurrentFloatingBarHeadLeft(),
                     BorderFloatingBarMainControls.Visibility == Visibility.Visible);
                 _popupManager?.MarkNeedsUpdate();
+                RefreshPopupPositionThrottled();
             }
 
             GridForFloatingBarDraging.Visibility = Visibility.Collapsed;
