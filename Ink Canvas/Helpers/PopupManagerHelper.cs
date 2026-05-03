@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Runtime.InteropServices;
 
 namespace Ink_Canvas.Helpers
 {
@@ -28,20 +28,43 @@ namespace Ink_Canvas.Helpers
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_SHOWWINDOW = 0x0040;
         private const uint SWP_NOOWNERZORDER = 0x0200;
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOPMOST = 0x00000008;
 
         #endregion
 
+        #region 配置
+
+        public class Config
+        {
+            public int TopmostCheckInterval { get; set; } = 10;
+            public bool UseRenderingSync { get; set; } = true;
+            public int InitialTopmostAttempts { get; set; } = 3;
+        }
+
+        #endregion
+
         #region 状态管理
 
         private readonly List<Popup> _registeredPopups = new List<Popup>();
+        private readonly Config _config;
         private bool _isInitialized = false;
-        private bool _offsetToggle = true;
         private bool _needsUpdate = false;
-        private int _topmostCheckCounter = 0;
-        private const int TopmostCheckInterval = 30;
+        private int _topmostCounter = 0;
+        private bool _offsetToggle = true;
+
+        #endregion
+
+        #region 构造函数
+
+        public PopupManagerHelper() : this(new Config()) { }
+
+        public PopupManagerHelper(Config config)
+        {
+            _config = config ?? new Config();
+        }
 
         #endregion
 
@@ -64,7 +87,10 @@ namespace Ink_Canvas.Helpers
 
             try
             {
-                CompositionTarget.Rendering += OnRendering;
+                if (_config.UseRenderingSync)
+                {
+                    CompositionTarget.Rendering += OnRendering;
+                }
                 _isInitialized = true;
             }
             catch (Exception ex)
@@ -79,11 +105,10 @@ namespace Ink_Canvas.Helpers
 
             _registeredPopups.Add(popup);
             popup.Opened += OnPopupOpened;
-            popup.Closed += OnPopupClosed;
 
-            if (popup.Child is FrameworkElement child && !popup.IsOpen)
+            if (popup.IsOpen)
             {
-                child.Visibility = Visibility.Collapsed;
+                BringToFront(popup);
             }
 
             System.Diagnostics.Debug.WriteLine($"[PopupManager] Registered popup: {popup.Name ?? "unnamed"}");
@@ -94,8 +119,8 @@ namespace Ink_Canvas.Helpers
             if (popup == null) return;
 
             popup.Opened -= OnPopupOpened;
-            popup.Closed -= OnPopupClosed;
             _registeredPopups.Remove(popup);
+            System.Diagnostics.Debug.WriteLine($"[PopupManager] Unregistered popup: {popup.Name ?? "unnamed"}");
         }
 
         private void OnPopupOpened(object sender, EventArgs e)
@@ -103,33 +128,10 @@ namespace Ink_Canvas.Helpers
             var popup = sender as Popup;
             if (popup == null) return;
 
-            if (popup.Child is FrameworkElement child)
-            {
-                child.Visibility = Visibility.Visible;
-            }
-
-            FixPopupZOrder(popup);
-
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
-                FixPopupZOrder(popup);
+                ApplyTopmostState(popup);
             }), DispatcherPriority.Loaded);
-
-            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                FixPopupZOrder(popup);
-            }), DispatcherPriority.Background);
-        }
-
-        private void OnPopupClosed(object sender, EventArgs e)
-        {
-            var popup = sender as Popup;
-            if (popup == null) return;
-
-            if (popup.Child is FrameworkElement child)
-            {
-                child.Visibility = Visibility.Collapsed;
-            }
         }
 
         #endregion
@@ -145,22 +147,59 @@ namespace Ink_Canvas.Helpers
         {
             if (popup?.Child == null) return;
 
-            FixPopupZOrder(popup);
-
-            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            Action bringToTopAction = () =>
             {
-                FixPopupZOrder(popup);
-            }), DispatcherPriority.Render);
+                try
+                {
+                    var source = PresentationSource.FromVisual(popup.Child) as HwndSource;
+                    if (source?.Handle == null) return;
 
-            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    ApplyTopmostStateToHwnd(source.Handle);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PopupManager] BringToFront failed: {ex.Message}");
+                }
+            };
+
+            for (int i = 0; i < _config.InitialTopmostAttempts; i++)
             {
-                FixPopupZOrder(popup);
-            }), DispatcherPriority.Background);
+                DispatcherPriority priority;
+                switch (i)
+                {
+                    case 0:
+                        priority = DispatcherPriority.Render;
+                        break;
+                    case 1:
+                        priority = DispatcherPriority.Normal;
+                        break;
+                    default:
+                        priority = DispatcherPriority.Background;
+                        break;
+                }
+
+                Application.Current.Dispatcher.BeginInvoke(bringToTopAction, priority);
+            }
         }
 
         public void BringToFrontLight(Popup popup)
         {
-            BringToFront(popup);
+            if (popup?.Child == null) return;
+
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    var source = PresentationSource.FromVisual(popup.Child) as HwndSource;
+                    if (source?.Handle == null) return;
+
+                    ApplyTopmostStateToHwnd(source.Handle);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PopupManager] BringToFrontLight failed: {ex.Message}");
+                }
+            }), DispatcherPriority.Render);
         }
 
         public void UpdatePosition(Popup popup)
@@ -195,9 +234,9 @@ namespace Ink_Canvas.Helpers
         {
             foreach (var popup in _registeredPopups)
             {
-                if (popup.IsOpen)
+                if (popup.IsOpen && popup.PlacementTarget != null)
                 {
-                    FixPopupZOrder(popup);
+                    ApplyTopmostState(popup);
                 }
             }
         }
@@ -212,25 +251,13 @@ namespace Ink_Canvas.Helpers
             {
                 if (_needsUpdate)
                 {
-                    foreach (var popup in _registeredPopups)
-                    {
-                        UpdatePosition(popup);
-                    }
+                    UpdateAllPositions();
+                    BringAllToFrontSync();
                     _needsUpdate = false;
+                    return;
                 }
 
-                _topmostCheckCounter++;
-                if (_topmostCheckCounter >= TopmostCheckInterval)
-                {
-                    _topmostCheckCounter = 0;
-                    foreach (var popup in _registeredPopups)
-                    {
-                        if (popup.IsOpen)
-                        {
-                            FixPopupZOrder(popup);
-                        }
-                    }
-                }
+                MaintainTopmostForAll();
             }
             catch (Exception ex)
             {
@@ -238,11 +265,45 @@ namespace Ink_Canvas.Helpers
             }
         }
 
+        private void UpdateAllPositions()
+        {
+            foreach (var popup in _registeredPopups)
+            {
+                UpdatePosition(popup);
+            }
+        }
+
+        private void BringAllToFrontSync()
+        {
+            foreach (var popup in _registeredPopups)
+            {
+                if (popup.IsOpen && popup.PlacementTarget != null)
+                {
+                    ApplyTopmostState(popup);
+                }
+            }
+        }
+
+        private void MaintainTopmostForAll()
+        {
+            _topmostCounter++;
+            if (_topmostCounter < _config.TopmostCheckInterval) return;
+            _topmostCounter = 0;
+
+            foreach (var popup in _registeredPopups)
+            {
+                if (popup.IsOpen && popup.PlacementTarget != null)
+                {
+                    ApplyTopmostState(popup);
+                }
+            }
+        }
+
         #endregion
 
-        #region 核心：修复 Popup Z-Order
+        #region 内部实现 - Win32 操作
 
-        private void FixPopupZOrder(Popup popup)
+        private void ApplyTopmostState(Popup popup)
         {
             if (popup?.Child == null) return;
 
@@ -251,9 +312,21 @@ namespace Ink_Canvas.Helpers
                 var source = PresentationSource.FromVisual(popup.Child) as HwndSource;
                 if (source?.Handle == null) return;
 
-                var hwnd = source.Handle;
+                ApplyTopmostStateToHwnd(source.Handle);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PopupManager] ApplyTopmostState failed: {ex.Message}");
+            }
+        }
+
+        private void ApplyTopmostStateToHwnd(IntPtr hwnd)
+        {
+            var shouldBeTopmost = CheckShouldBeTopmost();
+
+            try
+            {
                 int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                var shouldBeTopmost = CheckShouldBeTopmost();
 
                 if (shouldBeTopmost)
                 {
@@ -278,7 +351,7 @@ namespace Ink_Canvas.Helpers
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[PopupManager] FixPopupZOrder failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[PopupManager] ApplyTopmostStateToHwnd failed: {ex.Message}");
             }
         }
 
@@ -296,7 +369,6 @@ namespace Ink_Canvas.Helpers
                 foreach (var popup in _registeredPopups)
                 {
                     popup.Opened -= OnPopupOpened;
-                    popup.Closed -= OnPopupClosed;
                 }
                 _registeredPopups.Clear();
                 _isInitialized = false;
