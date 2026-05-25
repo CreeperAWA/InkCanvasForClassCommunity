@@ -216,6 +216,57 @@
                     </ui:SettingsExpander>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}"
+                        Text="{x:Static props:CanvasStrings.AutoFreeze_Title}" />
+
+                    <ui:SettingsExpander x:Name="ExpanderAutoFreezePptSlideShow"
+                            Header="{x:Static props:CanvasStrings.AutoFreeze_PptSlideShow_Header}"
+                            Description="{x:Static props:CanvasStrings.AutoFreeze_PptSlideShow_Desc}"
+                            d:IsExpanded="True">
+                        <ui:SettingsExpander.HeaderIcon>
+                            <ui:ImageIcon Source="/Resources/Icons-png/Powerpoint.png"/>
+                        </ui:SettingsExpander.HeaderIcon>
+                        <ui:ToggleSwitch x:Name="ToggleSwitchAutoFreezePptSlideShow"
+                                OnContent="{DynamicResource Common_On}"
+                                OffContent="{DynamicResource Common_Off}"
+                                Toggled="ToggleSwitchAutoFreezePptSlideShow_Toggled" />
+                        <ui:SettingsExpander.Items>
+                            <ui:SettingsCard Header="{x:Static props:CanvasStrings.AutoFreeze_DelayDuration}">
+                                <ui:SettingsCard.HeaderIcon>
+                                    <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.QuietHours}"/>
+                                </ui:SettingsCard.HeaderIcon>
+                                <TextBox x:Name="TextBoxPptSlideShowFreezeDelay" Width="100"
+                                         TextAlignment="Right"
+                                         LostFocus="TextBoxPptSlideShowFreezeDelay_LostFocus"
+                                         PreviewKeyDown="TextBoxFreezeDelay_PreviewKeyDown" />
+                            </ui:SettingsCard>
+                        </ui:SettingsExpander.Items>
+                    </ui:SettingsExpander>
+
+                    <ui:SettingsExpander x:Name="ExpanderAutoFreezeClassIsland"
+                            Header="{x:Static props:CanvasStrings.AutoFreeze_ClassIsland_Header}"
+                            Description="{x:Static props:CanvasStrings.AutoFreeze_ClassIsland_Desc}"
+                            d:IsExpanded="True">
+                        <ui:SettingsExpander.HeaderIcon>
+                            <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.QuietHours}"/>
+                        </ui:SettingsExpander.HeaderIcon>
+                        <ui:ToggleSwitch x:Name="ToggleSwitchAutoFreezeClassIsland"
+                                OnContent="{DynamicResource Common_On}"
+                                OffContent="{DynamicResource Common_Off}"
+                                Toggled="ToggleSwitchAutoFreezeClassIsland_Toggled" />
+                        <ui:SettingsExpander.Items>
+                            <ui:SettingsCard Header="{x:Static props:CanvasStrings.AutoFreeze_DelayDuration}">
+                                <ui:SettingsCard.HeaderIcon>
+                                    <ui:FontIcon Icon="{x:Static ui:SegoeFluentIcons.QuietHours}"/>
+                                </ui:SettingsCard.HeaderIcon>
+                                <TextBox x:Name="TextBoxClassIslandFreezeDelay" Width="100"
+                                         TextAlignment="Right"
+                                         LostFocus="TextBoxClassIslandFreezeDelay_LostFocus"
+                                         PreviewKeyDown="TextBoxFreezeDelay_PreviewKeyDown" />
+                            </ui:SettingsCard>
+                        </ui:SettingsExpander.Items>
+                    </ui:SettingsExpander>
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}"
                         Text="{x:Static props:GestureStrings.Gesture_Title}" />
 
                     <controls:LabeledSettingsCard x:Name="CardEnableTwoFingerRotationOnSelection"

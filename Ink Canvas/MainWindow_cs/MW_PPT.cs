@@ -1572,6 +1572,12 @@ namespace Ink_Canvas
                         SetFloatingBarHighlightPosition("cursor");
 
                         CheckMainWindowVisibility();
+
+                        if (Settings.Automation.IsEnablePptSlideShowAutoFreeze)
+                        {
+                            int freezePage = GetCurrentFreezePageIndex();
+                            ScheduleDelayedFreeze(freezePage, DateTime.UtcNow);
+                        }
                     }
                     catch (Exception ex)
                     {

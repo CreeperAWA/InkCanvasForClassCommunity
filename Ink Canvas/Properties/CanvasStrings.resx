@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -329,5 +329,23 @@
   </data>
   <data name="Shape_RemoveAsymptote" xml:space="preserve">
     <value>是否移除渐近线？</value>
+  </data>
+  <data name="AutoFreeze_Title" xml:space="preserve">
+    <value>自动冻结</value>
+  </data>
+  <data name="AutoFreeze_PptSlideShow_Header" xml:space="preserve">
+    <value>幻灯片放映结束时自动冻结</value>
+  </data>
+  <data name="AutoFreeze_PptSlideShow_Desc" xml:space="preserve">
+    <value>开启后，退出 PPT 幻灯片放映模式时会自动冻结当前页面。判断逻辑：退出幻灯片放映时启动倒计时，倒计时结束后若无操作则自动冻结页面。</value>
+  </data>
+  <data name="AutoFreeze_DelayDuration" xml:space="preserve">
+    <value>倒计时时长（秒）</value>
+  </data>
+  <data name="AutoFreeze_ClassIsland_Header" xml:space="preserve">
+    <value>ClassIsland 课程结束自动冻结</value>
+  </data>
+  <data name="AutoFreeze_ClassIsland_Desc" xml:space="preserve">
+    <value>开启后，根据 ClassIsland 课程表信息，在当前课程老师与下节课老师不同时自动冻结页面。判断逻辑：比较当前课程和下节课的老师姓名，若为不同老师则启动倒计时，若为同一位老师则不执行冻结，若下节课信息为空（如放学后）则执行冻结。</value>
   </data>
 </root>

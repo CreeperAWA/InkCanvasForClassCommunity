@@ -1,3 +1,4 @@
+using Ink_Canvas.Helpers;
 using Ink_Canvas.Properties;
 using Ink_Canvas.Windows.SettingsViews.Helpers;
 using System;
@@ -76,6 +77,15 @@ namespace Ink_Canvas.Windows.SettingsViews.Pages
                     CardEnableTwoFingerRotationOnSelection.IsOn = settings.Gesture.IsEnableTwoFingerRotationOnSelection;
                 }
 
+                if (settings.Automation != null)
+                {
+                    ToggleSwitchAutoFreezePptSlideShow.IsOn = settings.Automation.IsEnablePptSlideShowAutoFreeze;
+                    TextBoxPptSlideShowFreezeDelay.Text = settings.Automation.PptSlideShowAutoFreezeDelaySeconds.ToString();
+                    
+                    ToggleSwitchAutoFreezeClassIsland.IsOn = settings.Automation.IsEnableClassIslandAutoFreeze;
+                    TextBoxClassIslandFreezeDelay.Text = settings.Automation.ClassIslandAutoFreezeDelaySeconds.ToString();
+                }
+
                 if (settings.Canvas != null)
                 {
                     ToggleSwitchEnablePalmEraser.IsOn = settings.Canvas.EnablePalmEraser;
@@ -92,6 +102,8 @@ namespace Ink_Canvas.Windows.SettingsViews.Pages
             ExpanderBrushAutoRestore.IsExpanded = ToggleSwitchBrushAutoRestore.IsOn;
             ExpanderEnableEraserAutoSwitchBack.IsExpanded = ToggleSwitchEnableEraserAutoSwitchBack.IsOn;
             ExpanderEnablePalmEraser.IsExpanded = ToggleSwitchEnablePalmEraser.IsOn;
+            ExpanderAutoFreezePptSlideShow.IsExpanded = ToggleSwitchAutoFreezePptSlideShow.IsOn;
+            ExpanderAutoFreezeClassIsland.IsExpanded = ToggleSwitchAutoFreezeClassIsland.IsOn;
         }
 
         private void LoadBrushAutoRestoreColor(string hex)
@@ -341,5 +353,88 @@ namespace Ink_Canvas.Windows.SettingsViews.Pages
             SettingsManager.Settings.Canvas.PalmEraserSensitivity = ComboBoxPalmEraserSensitivity.SelectedIndex;
             SettingsManager.SaveSettingsToFile();
         }
+
+        #region Auto Freeze
+
+        private void ToggleSwitchAutoFreezePptSlideShow_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (!_isLoaded) return;
+            SettingsManager.Settings.Automation.IsEnablePptSlideShowAutoFreeze = ToggleSwitchAutoFreezePptSlideShow.IsOn;
+            ExpanderAutoFreezePptSlideShow.IsExpanded = ToggleSwitchAutoFreezePptSlideShow.IsOn;
+            SettingsManager.SaveSettingsToFile();
+        }
+
+        private void ToggleSwitchAutoFreezeClassIsland_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (!_isLoaded) return;
+            SettingsManager.Settings.Automation.IsEnableClassIslandAutoFreeze = ToggleSwitchAutoFreezeClassIsland.IsOn;
+            ExpanderAutoFreezeClassIsland.IsExpanded = ToggleSwitchAutoFreezeClassIsland.IsOn;
+            var mw = Application.Current.MainWindow as MainWindow;
+            if (mw != null)
+            {
+                if (ToggleSwitchAutoFreezeClassIsland.IsOn)
+                {
+                    if (mw._classIslandAutoFreezeManager == null)
+                    {
+                        mw._classIslandAutoFreezeManager = new ClassIslandAutoFreezeManager();
+                        mw._classIslandAutoFreezeManager.Initialize(mw);
+                    }
+                }
+                else
+                {
+                    mw._classIslandAutoFreezeManager?.Dispose();
+                    mw._classIslandAutoFreezeManager = null;
+                }
+            }
+            SettingsManager.SaveSettingsToFile();
+        }
+
+        private void TextBoxPptSlideShowFreezeDelay_LostFocus(object sender, RoutedEventArgs e)
+        {
+            SavePptSlideShowFreezeDelay();
+        }
+
+        private void TextBoxClassIslandFreezeDelay_LostFocus(object sender, RoutedEventArgs e)
+        {
+            SaveClassIslandFreezeDelay();
+        }
+
+        private void TextBoxFreezeDelay_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                if (sender == TextBoxPptSlideShowFreezeDelay)
+                    SavePptSlideShowFreezeDelay();
+                else if (sender == TextBoxClassIslandFreezeDelay)
+                    SaveClassIslandFreezeDelay();
+                e.Handled = true;
+            }
+        }
+
+        private void SavePptSlideShowFreezeDelay()
+        {
+            if (!_isLoaded) return;
+            if (int.TryParse(TextBoxPptSlideShowFreezeDelay.Text, out int delaySeconds))
+            {
+                delaySeconds = Math.Max(1, delaySeconds);
+                SettingsManager.Settings.Automation.PptSlideShowAutoFreezeDelaySeconds = delaySeconds;
+                TextBoxPptSlideShowFreezeDelay.Text = delaySeconds.ToString();
+                SettingsManager.SaveSettingsToFile();
+            }
+        }
+
+        private void SaveClassIslandFreezeDelay()
+        {
+            if (!_isLoaded) return;
+            if (int.TryParse(TextBoxClassIslandFreezeDelay.Text, out int delaySeconds))
+            {
+                delaySeconds = Math.Max(1, delaySeconds);
+                SettingsManager.Settings.Automation.ClassIslandAutoFreezeDelaySeconds = delaySeconds;
+                TextBoxClassIslandFreezeDelay.Text = delaySeconds.ToString();
+                SettingsManager.SaveSettingsToFile();
+            }
+        }
+
+        #endregion
     }
 }

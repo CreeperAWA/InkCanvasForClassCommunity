@@ -32,7 +32,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Configurations>Debug;Release</Configurations>
     <Platforms>AnyCPU;x86;x64</Platforms>
-    <LangVersion>10</LangVersion>
+    <LangVersion>11</LangVersion>
     <NoWarn>$(NoWarn);CA1416;NU1701;MSB3270;CS8012;NETSDK1138</NoWarn>
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
@@ -126,6 +126,7 @@
     <PackageReference Include="System.Data.DataSetExtensions" Version="4.5.0" />
     <PackageReference Include="System.Management" Version="10.0.5" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="dotnetCampus.Ipc" Version="2.0.0-alpha436" />
     <PackageReference Include="NHotkey.Wpf" Version="4.0.0" />
     <PackageReference Include="OSVersionExt" Version="4.1.0" />
     <PackageReference Include="AForge.Video" Version="2.2.5" />

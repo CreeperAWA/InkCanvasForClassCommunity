@@ -16,8 +16,6 @@ namespace Ink_Canvas
     {
         internal static readonly Guid FrozenStrokePropertyGuid = new Guid("12345678-1234-1234-1234-123456789ABC");
 
-        private static readonly TimeSpan DelayedFreezeDelay = TimeSpan.FromMinutes(3);
-
         private readonly bool[] frozenPages = new bool[101];
         private readonly DateTime[] pageLastUserInkMutationUtc = new DateTime[101];
 
@@ -30,7 +28,7 @@ namespace Ink_Canvas
 
         private Ink_Canvas.Controls.BoardToolbarButton BoardInkFreezeBtn;
 
-        private int GetCurrentFreezePageIndex()
+        internal int GetCurrentFreezePageIndex()
             => currentMode == 0 ? 0 : CurrentWhiteboardIndex;
 
         private static bool IsValidFreezePageIndex(int pageIndex)
@@ -106,7 +104,7 @@ namespace Ink_Canvas
             }
         }
 
-        private void FreezePage(int pageIndex, bool notify = true)
+        internal void FreezePage(int pageIndex, bool notify = true)
         {
             if (!IsValidFreezePageIndex(pageIndex)) return;
             if (frozenPages[pageIndex])
@@ -346,7 +344,14 @@ namespace Ink_Canvas
 
         private void ScheduleDelayedFreeze(int pageIndex, DateTime referenceTimeUtc)
         {
+            ScheduleDelayedFreeze(pageIndex, referenceTimeUtc, Settings.Automation.PptSlideShowAutoFreezeDelaySeconds);
+        }
+
+        private void ScheduleDelayedFreeze(int pageIndex, DateTime referenceTimeUtc, int delaySeconds)
+        {
             if (!IsValidFreezePageIndex(pageIndex)) return;
+
+            var delay = TimeSpan.FromSeconds(Math.Max(1, delaySeconds));
 
             delayedFreezeTimer?.Stop();
             delayedFreezePageIndex = pageIndex;
@@ -354,7 +359,7 @@ namespace Ink_Canvas
 
             delayedFreezeTimer = new DispatcherTimer
             {
-                Interval = DelayedFreezeDelay
+                Interval = delay
             };
             delayedFreezeTimer.Tick += (s, e) =>
             {
@@ -372,7 +377,22 @@ namespace Ink_Canvas
             };
             delayedFreezeTimer.Start();
 
-            ShowNotification(MainWindowStrings.Main_Freeze_AutoFreezeIn3Min);
+            if (delaySeconds >= 60)
+            {
+                var minutes = delaySeconds / 60;
+                ShowNotification($"将在 {minutes} 分钟后检查并自动冻结页面");
+            }
+            else
+            {
+                ShowNotification($"将在 {delaySeconds} 秒后检查并自动冻结页面");
+            }
+        }
+        // 已修复搜索匹配问题并确认通知字符串调用
+
+        internal bool HasPageInkMutationSince(int pageIndex, DateTime referenceTimeUtc)
+        {
+            if (!IsValidFreezePageIndex(pageIndex)) return false;
+            return pageLastUserInkMutationUtc[pageIndex] > referenceTimeUtc;
         }
     }
 }

@@ -749,6 +749,18 @@ namespace Ink_Canvas
 
         [JsonProperty("floatingWindowInterceptor")]
         public FloatingWindowInterceptorSettings FloatingWindowInterceptor { get; set; } = new FloatingWindowInterceptorSettings();
+
+        [JsonProperty("isEnablePptSlideShowAutoFreeze")]
+        public bool IsEnablePptSlideShowAutoFreeze { get; set; } = false;
+
+        [JsonProperty("pptSlideShowAutoFreezeDelaySeconds")]
+        public int PptSlideShowAutoFreezeDelaySeconds { get; set; } = 180;
+
+        [JsonProperty("isEnableClassIslandAutoFreeze")]
+        public bool IsEnableClassIslandAutoFreeze { get; set; } = false;
+
+        [JsonProperty("classIslandAutoFreezeDelaySeconds")]
+        public int ClassIslandAutoFreezeDelaySeconds { get; set; } = 180;
     }
 
     public class FloatingWindowInterceptorSettings

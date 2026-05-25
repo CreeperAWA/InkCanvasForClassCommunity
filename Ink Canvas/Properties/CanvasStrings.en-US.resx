@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
     <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
@@ -329,5 +329,23 @@
   </data>
   <data name="Shape_RemoveAsymptote" xml:space="preserve">
     <value>Remove asymptote lines?</value>
+  </data>
+  <data name="AutoFreeze_Title" xml:space="preserve">
+    <value>Auto Freeze</value>
+  </data>
+  <data name="AutoFreeze_PptSlideShow_Header" xml:space="preserve">
+    <value>Auto Freeze on Slide Show End</value>
+  </data>
+  <data name="AutoFreeze_PptSlideShow_Desc" xml:space="preserve">
+    <value>When enabled, the current page will be automatically frozen when exiting PPT slide show mode. Logic: A countdown starts when exiting slide show, and the page is frozen if no operation is detected after the countdown ends.</value>
+  </data>
+  <data name="AutoFreeze_DelayDuration" xml:space="preserve">
+    <value>Countdown Duration (seconds)</value>
+  </data>
+  <data name="AutoFreeze_ClassIsland_Header" xml:space="preserve">
+    <value>ClassIsland Auto Freeze on Class End</value>
+  </data>
+  <data name="AutoFreeze_ClassIsland_Desc" xml:space="preserve">
+    <value>When enabled, based on ClassIsland schedule, the page will be automatically frozen when the current class teacher is different from the next class teacher. Logic: If teachers are different, start countdown; if same teacher, no freeze; if next class is null (e.g., after school), execute freeze.</value>
   </data>
 </root>

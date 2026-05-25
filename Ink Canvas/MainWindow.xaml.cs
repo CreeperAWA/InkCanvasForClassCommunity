@@ -60,6 +60,9 @@ namespace Ink_Canvas
         // 悬浮窗拦截管理器
         public FloatingWindowInterceptorManager _floatingWindowInterceptorManager;
 
+        // ClassIsland 自动冻结管理器
+        internal ClassIslandAutoFreezeManager _classIslandAutoFreezeManager;
+
         // 窗口概览模型
         private WindowOverviewModel _windowOverviewModel;
 
@@ -1748,6 +1751,12 @@ namespace Ink_Canvas
                     };
                 }
             }), DispatcherPriority.Loaded);
+
+            if (Settings.Automation.IsEnableClassIslandAutoFreeze)
+            {
+                _classIslandAutoFreezeManager = new ClassIslandAutoFreezeManager();
+                _classIslandAutoFreezeManager.Initialize(this);
+            }
         }
 
 
@@ -2063,6 +2072,13 @@ namespace Ink_Canvas
             {
                 _floatingWindowInterceptorManager.Dispose();
                 _floatingWindowInterceptorManager = null;
+            }
+
+            // 清理 ClassIsland 自动冻结管理器
+            if (_classIslandAutoFreezeManager != null)
+            {
+                _classIslandAutoFreezeManager.Dispose();
+                _classIslandAutoFreezeManager = null;
             }
 
             // 清理窗口概览模型
